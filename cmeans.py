@@ -2,11 +2,12 @@ import numpy as np
 import pylab as pl
 import math
 from sklearn.metrics import confusion_matrix, accuracy_score
-#Regression program for k-means and fuzzy c-means
+#Regression program for fuzzy c-means
 #by spencer Duncan
 
 clusters = 4
-rounds = 10
+rounds = 3
+fuzzifier = 3
 
 def readdata(filename):
     temparray = []
@@ -19,38 +20,50 @@ def readdata(filename):
     data = np.asarray(temparray, float)
     return data
 
-#update clusters
-def e(w, data, centroids):
-    for i in range(data.shape[0]):
-        norms = np.linalg.norm(centroids-data[i], axis=1)
-        w[i] = np.argmin(norms, axis=0)
+#update class membership weights
+def m(w, data, centroids):
+    for i in range(w.shape[0]):
+        for j in range(w.shape[1]):
+            numerator = np.linalg.norm(data[i,:]- centroids[j,:])
+            denominator = 0
+            wSum = 0
+            for k in range(clusters):
+                denominator = np.linalg.norm(data[i,:]- centroids[k,:])
+                wSum += math.pow(numerator/denominator, (2/(fuzzifier-1)))
+            w[i,j] = wSum
+    print("weights:", w)
     return
 
 #calc new centroids
-def m(w, data, centroids):
+def e(w, data, centroids):
     global clusters
     clusterRange = clusters
     for i in range(clusterRange):
-        pred = w[:] == i
-        cluster = data[pred]
-        if(cluster.shape[0] == 0):
-            np.delete(centroids, i)
-            clusters = clusters-1
-        else:
-            centroids[i] = np.mean(cluster, axis=0)
+        classweights = np.power(w[:,i], fuzzifier)
+        centroids[i] = np.sum(np.multiply(classweights[:,np.newaxis], data), axis=0)
+        centroids[i] = centroids[i]/np.sum(classweights)
+    print("new centroids: ",centroids)
     return
 
-def display(w, data, centroids):
-    colors = w/clusters
+def updateLabels(labels, w):
+    newlabels = np.argmax(w, axis=1)
+    print("updated labes:",newlabels)
+    return newlabels
+
+
+def display(labels, data, centroids):
+    colors = labels/clusters
     pl.scatter(data[:,0], data[:,1],c=colors)
     pl.scatter(centroids[:,0], centroids[:,1], c='r')
     pl.show()
 
-def calcError(w, data, centroids):
+def calcError(labels, data, centroids):
     sum = 0
     for i in range(clusters):
-        pred = w[:] == i
+
+        pred = labels[:] == i
         cluster = data[pred]
+
         diff = np.linalg.norm(cluster-centroids[i], axis=1)
         diff = np.square(diff)
         diff = np.sum(diff)
@@ -60,18 +73,21 @@ def calcError(w, data, centroids):
 def regress(data, absCord):
     datasize = data.shape[0]
     centroids = np.random.uniform(low=-absCord, high=absCord, size=(clusters,2))
-    w = np.random.randint(clusters,size=datasize)
+    w = np.random.rand(datasize, clusters)
+    labels = np.zeros((datasize,1))
     pError = 0
     error = 0
     deltError = 100
     while(deltError > 1):
         m(w, data, centroids)
         e(w, data, centroids)
-        error = calcError(w, data, centroids)
+        labels = updateLabels(labels, w)
+        error = calcError(labels, data, centroids)
         deltError = abs(pError-error)
         pError = error
-    display(w, data, centroids)
-    return w, centroids, error
+        display(labels, data, centroids)
+    display(labels, data, centroids)
+    return labels, centroids, error
 
 def main():
     filename = "cluster_dataset.txt"
